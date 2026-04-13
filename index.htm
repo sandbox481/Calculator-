@@ -1,1 +1,1363 @@
 
+
+
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi Calculator</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    html, body { height: 100%; margin: 0; }
+    * { box-sizing: border-box; }
+    .font-display { font-family: 'Space Mono', monospace; }
+    .font-body { font-family: 'DM Sans', sans-serif; }
+    .calc-btn {
+      transition: all 0.12s ease;
+      user-select: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .calc-btn:active { transform: scale(0.93); opacity: 0.6; }
+    .calc-btn.pressed { opacity: 0.6 !important; }
+    .tab-btn { transition: all 0.2s ease; cursor: pointer; white-space: nowrap; }
+    .tab-btn.active { transform: translateY(-1px); }
+    .result-flash { animation: flashIn 0.3s ease; }
+    @keyframes flashIn { 0% { opacity: 0.5; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes slideUp { 0% { transform: translateX(-50%) translateY(100px); opacity: 0; } 100% { transform: translateX(-50%) translateY(0); opacity: 1; } }
+    @keyframes slideDown { 0% { transform: translateX(-50%) translateY(0); opacity: 1; } 100% { transform: translateX(-50%) translateY(100px); opacity: 0; } }
+    .mode-enter { animation: modeSlide 0.25s ease; }
+    @keyframes modeSlide { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+    ::-webkit-scrollbar { height: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full font-body">
+  <div id="app" class="h-full w-full flex" style="background:#0f0f13;">
+   <!-- Sliding Sidebar Left -->
+   <div class="fixed left-0 top-0 h-full w-72 z-50 transition-transform duration-300 ease-out flex flex-col" id="sidebar" style="background:#1a1a24;transform:translateX(-100%)">
+    <div class="p-4 flex items-center justify-between border-b" style="border-color:#6b6b8022">
+     <h2 class="font-display font-bold text-sm" style="color:#e8e6f0">Tools</h2><button id="closeSidebar" class="p-1 hover:opacity-70 transition" onclick="toggleSidebar()"><i data-lucide="x" style="width:18px;height:18px;color:#e8e6f0"></i></button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-2" id="toolList"></div>
+   </div><!-- Sliding History Right -->
+   <div class="fixed right-0 top-0 h-full w-72 z-50 transition-transform duration-300 ease-out flex flex-col" id="historyPanel" style="background:#1a1a24;transform:translateX(100%)">
+    <div class="p-4 flex items-center justify-between border-b" style="border-color:#6b6b8022">
+     <h2 class="font-display font-bold text-sm" style="color:#e8e6f0">History</h2>
+     <div class="flex gap-1">
+      <button id="copyHistory" class="p-1 hover:opacity-70 transition" onclick="copyAllHistory()" title="Copy all"><i data-lucide="copy" style="width:16px;height:16px;color:#00ff00"></i></button> <button id="clearHistory" class="p-1 hover:opacity-70 transition" onclick="clearAllHistory()" title="Clear"><i data-lucide="trash-2" style="width:16px;height:16px;color:#ff4444"></i></button> <button id="closeHistory" class="p-1 hover:opacity-70 transition" onclick="toggleHistory()"><i data-lucide="x" style="width:18px;height:18px;color:#e8e6f0"></i></button>
+     </div>
+    </div>
+    <div class="flex-1 overflow-y-auto p-3 space-y-1" id="historyListPanel"></div>
+   </div><!-- Main Content -->
+   <div class="flex-1 flex flex-col">
+    <!-- Header -->
+    <header class="px-5 pt-5 pb-2 flex items-center gap-3 justify-between">
+     <div class="flex items-center gap-3"><button id="menuBtn" class="p-1 hover:opacity-70 transition" onclick="toggleSidebar()"><i data-lucide="menu" style="width:18px;height:18px;color:#00ff00"></i></button>
+      <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:#00ff00">
+       <i data-lucide="calculator" style="width:18px;height:18px;color:#0f0f13;"></i>
+      </div>
+      <h1 id="appTitle" class="font-display text-lg font-bold" style="color:#e8e6f0">Multi Toolkit</h1>
+     </div><button id="historyBtn" class="p-1 hover:opacity-70 transition" onclick="toggleHistory()"><i data-lucide="history" style="width:18px;height:18px;color:#00ff00"></i></button>
+    </header><!-- Content -->
+    <main class="flex-1 px-4 pb-5 overflow-auto">
+     <div id="modeContent" class="mode-enter"></div>
+    </main>
+   </div>
+  </div>
+  <script>
+    const modes = [
+      { id:'basic', label:'Basic Calc', icon:'calculator' },
+      { id:'scientific', label:'Scientific', icon:'flask-conical' },
+      { id:'programmer', label:'Programmer', icon:'binary' },
+      { id:'stopwatch', label:'Stopwatch', icon:'timer' },
+      { id:'equation', label:'Equation Solver', icon:'lightbulb' },
+      { id:'bmi', label:'BMI', icon:'heart-pulse' },
+      { id:'age', label:'Age', icon:'cake' },
+      { id:'unit', label:'Units', icon:'ruler' },
+      { id:'cooking', label:'Cooking', icon:'utensils' },
+      { id:'currency', label:'Currency', icon:'dollar-sign' },
+      { id:'timezone', label:'Timezone', icon:'globe' },
+      { id:'mortgage', label:'Mortgage', icon:'home' },
+      { id:'percentage', label:'Percentage', icon:'percent' },
+      { id:'tip', label:'Tip Split', icon:'split-square-vertical' },
+      { id:'discount', label:'Discount', icon:'tag' },
+      { id:'shopping', label:'Shopping', icon:'shopping-cart' },
+      { id:'geometry', label:'Geometry', icon:'hexagon' },
+    ];
+
+    let currentMode = 'basic';
+    let calcDisplay = '0';
+    let calcPrev = '';
+    let calcOp = '';
+    let calcReset = false;
+    let sciDeg = true;
+    let stopwatchRunning = false;
+    let stopwatchTime = 0;
+    let stopwatchInterval = null;
+    let calcHistory = [];
+    let calcHistoryIndex = 0;
+    let fullHistory = [];
+
+    const BG = '#0f0f13';
+    const SURFACE = '#1a1a24';
+    const ACCENT = '#00ff00';
+    const TEXT = '#e8e6f0';
+    const DIM = '#6b6b80';
+
+    const defaultConfig = {
+      app_title: 'Multi Toolkit',
+      calculator_name: 'Multi Calculator',
+      background_color: BG,
+      surface_color: SURFACE,
+      text_color: TEXT,
+      primary_action_color: ACCENT,
+      secondary_action_color: DIM
+    };
+
+    function applyConfig(cfg) {
+      const bg = cfg.background_color || defaultConfig.background_color;
+      const sf = cfg.surface_color || defaultConfig.surface_color;
+      const tx = cfg.text_color || defaultConfig.text_color;
+      const ac = cfg.primary_action_color || defaultConfig.primary_action_color;
+      const dm = cfg.secondary_action_color || defaultConfig.secondary_action_color;
+
+      document.getElementById('app').style.background = bg;
+      const title = document.getElementById('appTitle');
+      if (title) { title.textContent = cfg.calculator_name || defaultConfig.calculator_name; title.style.color = tx; }
+
+      const icon = title?.previousElementSibling;
+      if (icon) icon.style.background = ac;
+
+      document.querySelectorAll('.tab-btn').forEach(t => {
+        const active = t.dataset.mode === currentMode;
+        t.style.background = active ? ACCENT : SURFACE;
+        t.style.color = active ? '#0f0f13' : DIM;
+      });
+
+      document.querySelectorAll('.surface-bg').forEach(el => el.style.background = sf);
+      document.querySelectorAll('.accent-bg').forEach(el => el.style.background = ac);
+      document.querySelectorAll('.text-main').forEach(el => el.style.color = tx);
+      document.querySelectorAll('.text-dim').forEach(el => el.style.color = dm);
+      document.querySelectorAll('.accent-text').forEach(el => el.style.color = ac);
+      document.querySelectorAll('.calc-num').forEach(el => { el.style.background = sf; el.style.color = tx; });
+      document.querySelectorAll('.calc-op').forEach(el => { el.style.background = ac+'44'; el.style.color = ac; });
+      document.querySelectorAll('.calc-accent').forEach(el => { el.style.background = ac; el.style.color = '#fff'; });
+      document.querySelectorAll('.calc-func').forEach(el => { el.style.background = ac+'55'; el.style.color = ac; });
+      document.querySelectorAll('.input-field').forEach(el => { el.style.background = sf; el.style.color = tx; el.style.borderColor = dm+'44'; });
+      document.querySelectorAll('.result-box').forEach(el => { el.style.background = ac+'15'; el.style.borderColor = ac+'33'; });
+    }
+
+    // Tabs
+    function renderTabs() {
+      const list = document.getElementById('toolList');
+      list.innerHTML = '';
+      modes.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-all mb-1 tool-btn';
+        btn.dataset.mode = m.id;
+        btn.innerHTML = `<i data-lucide="${m.icon}" style="width:14px;height:14px;display:inline;margin-right:8px;"></i>${m.label}`;
+        btn.onclick = () => { 
+          currentMode = m.id;
+          // Update all tool buttons
+          document.querySelectorAll('.tool-btn').forEach(b => {
+            if (b.dataset.mode === currentMode) {
+              b.style.background = ACCENT;
+              b.style.color = '#0f0f13';
+            } else {
+              b.style.background = SURFACE;
+              b.style.color = TEXT;
+            }
+          });
+          renderMode();
+          toggleSidebar();
+          applyConfig(window.elementSdk?.config || defaultConfig);
+        };
+        btn.style.background = currentMode === m.id ? ACCENT : SURFACE;
+        btn.style.color = currentMode === m.id ? '#0f0f13' : TEXT;
+        list.appendChild(btn);
+      });
+      lucide.createIcons();
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.style.transform = sidebar.style.transform === 'translateX(0px)' ? 'translateX(-100%)' : 'translateX(0px)';
+    }
+
+    function toggleHistory() {
+      const panel = document.getElementById('historyPanel');
+      panel.style.transform = panel.style.transform === 'translateX(0px)' ? 'translateX(100%)' : 'translateX(0px)';
+    }
+
+    window.copyAllHistory = function() {
+      const copyBtn = document.getElementById('copyHistory');
+      copyBtn.style.opacity = '0.5';
+      const items = fullHistory.map(h => `[${h.tool}] ${h.calculation} = ${h.result}`).join('\n');
+      navigator.clipboard.writeText(items).then(() => {
+        showConfirmation('History copied to clipboard!');
+        setTimeout(() => { copyBtn.style.opacity = '1'; }, 300);
+      }).catch(err => {
+        showConfirmation('Failed to copy history');
+        setTimeout(() => { copyBtn.style.opacity = '1'; }, 300);
+      });
+    };
+
+    window.clearAllHistory = function() {
+      showConfirmationDialog('Clear all history?', function() {
+        fullHistory = [];
+        calcHistory = [];
+        calcHistoryIndex = 0;
+        updateHistoryDisplay();
+        showConfirmation('History cleared');
+      });
+    };
+
+    function showConfirmationDialog(message, onConfirm) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000`;
+      const modal = document.createElement('div');
+      modal.style.cssText = `background:${SURFACE};border-radius:16px;padding:24px;max-width:300px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)`;
+      modal.innerHTML = `
+        <div style="color:${TEXT};font-size:16px;margin-bottom:24px;font-weight:500">${message}</div>
+        <div style="display:flex;gap:12px">
+          <button style="flex:1;padding:10px;background:${DIM}44;color:${TEXT};border:none;border-radius:8px;cursor:pointer;font-weight:600" onclick="this.parentElement.parentElement.parentElement.remove()">Cancel</button>
+          <button style="flex:1;padding:10px;background:${ACCENT};color:#0f0f13;border:none;border-radius:8px;cursor:pointer;font-weight:600" onclick="this.parentElement.parentElement.parentElement.remove();">Confirm</button>
+        </div>
+      `;
+      const confirmBtn = modal.querySelector('button:last-child');
+      confirmBtn.onclick = () => {
+        overlay.remove();
+        onConfirm();
+      };
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    }
+
+    function showConfirmation(message) {
+      const toast = document.createElement('div');
+      toast.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:${ACCENT};color:#0f0f13;padding:12px 20px;border-radius:8px;z-index:1001;font-weight:600;animation:slideUp 0.3s ease`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.animation = 'slideDown 0.3s ease'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+    }
+
+    function renderMode() {
+      const c = document.getElementById('modeContent');
+      c.className = 'mode-enter';
+      switch(currentMode) {
+        case 'basic': c.innerHTML = basicHTML(); setupBasic(); break;
+        case 'scientific': c.innerHTML = scientificHTML(); setupScientific(); break;
+        case 'programmer': c.innerHTML = programmerHTML(); setupProgrammer(); break;
+        case 'stopwatch': c.innerHTML = stopwatchHTML(); setupStopwatch(); break;
+        case 'equation': c.innerHTML = equationHTML(); break;
+        case 'bmi': c.innerHTML = bmiHTML(); break;
+        case 'age': c.innerHTML = ageHTML(); break;
+        case 'unit': c.innerHTML = unitHTML(); setupUnit(); break;
+        case 'cooking': c.innerHTML = cookingHTML(); setupCooking(); break;
+        case 'currency': c.innerHTML = currencyHTML(); setupCurrency(); break;
+        case 'timezone': c.innerHTML = timezoneHTML(); break;
+        case 'mortgage': c.innerHTML = mortgageHTML(); break;
+        case 'percentage': c.innerHTML = percentHTML(); break;
+        case 'tip': c.innerHTML = tipHTML(); break;
+        case 'discount': c.innerHTML = discountHTML(); break;
+        case 'shopping': c.innerHTML = shoppingHTML(); setupShopping(); break;
+        case 'geometry': c.innerHTML = geometryHTML(); break;
+      }
+      lucide.createIcons();
+    }
+
+    // ============== BASIC ==============
+    function basicHTML() {
+      calcDisplay='0'; calcPrev=''; calcOp=''; calcReset=false;
+      const btns = [
+        ['C','func'],['±','func'],['%','func'],['÷','op'],
+        ['7','num'],['8','num'],['9','num'],['×','op'],
+        ['4','num'],['5','num'],['6','num'],['−','op'],
+        ['1','num'],['2','num'],['3','num'],['+','op'],
+        ['0','num'],['.','num'],['⌫','func'],['=','accent'],
+      ];
+      return `
+        <div class="surface-bg rounded-2xl p-4 mb-3" style="background:${SURFACE}">
+          <div class="text-dim text-xs text-right h-5 font-display" id="calcPrev" style="color:${DIM}"></div>
+          <div class="text-main text-right text-4xl font-display font-bold truncate" id="calcDisp" style="color:${TEXT}">0</div>
+        </div>
+        <div class="grid grid-cols-4 gap-2 mb-3">
+          ${btns.map(([l,t])=>`<button class="calc-btn calc-${t} h-14 text-lg" data-val="${l}">${l}</button>`).join('')}
+        </div>`;
+    }
+    function setupBasic() {
+      document.querySelectorAll('[data-val]').forEach(b => {
+        b.onclick = (e) => {
+          e.preventDefault();
+          b.classList.add('pressed');
+          setTimeout(() => b.classList.remove('pressed'), 200);
+          handleBasicBtn(b.dataset.val);
+        };
+      });
+      updateHistoryDisplay();
+    }
+    function handleBasicBtn(v) {
+      const d = document.getElementById('calcDisp');
+      const p = document.getElementById('calcPrev');
+      if ('0123456789'.includes(v)) {
+        calcDisplay = (calcDisplay==='0'||calcReset) ? v : calcDisplay+v;
+        calcReset = false;
+      } else if (v==='.') {
+        if (calcReset) { calcDisplay='0'; calcReset=false; }
+        if (!calcDisplay.includes('.')) calcDisplay+='.';
+      } else if (v==='C') { calcDisplay='0'; calcPrev=''; calcOp=''; calcReset=false; p.textContent=''; }
+      else if (v==='⌫') { calcDisplay = calcDisplay.length>1 ? calcDisplay.slice(0,-1) : '0'; }
+      else if (v==='±') { calcDisplay = calcDisplay.startsWith('-') ? calcDisplay.slice(1) : '-'+calcDisplay; }
+      else if (v==='%') { calcDisplay = String(parseFloat(calcDisplay)/100); }
+      else if ('÷×−+'.includes(v)) {
+        if (calcOp && !calcReset) calcDisplay = String(evaluate(parseFloat(calcPrev), parseFloat(calcDisplay), calcOp));
+        calcPrev = calcDisplay; calcOp = v; calcReset = true;
+        p.textContent = calcPrev+' '+v;
+      } else if (v==='=') {
+        if (calcOp) {
+          const r = evaluate(parseFloat(calcPrev), parseFloat(calcDisplay), calcOp);
+          const calculation = calcPrev+' '+calcOp+' '+calcDisplay;
+          p.textContent = calculation+' =';
+          calcDisplay = String(r); calcOp=''; calcReset=true;
+          addToHistory(calcDisplay, calculation);
+        }
+      }
+      d.textContent = calcDisplay;
+      d.classList.remove('result-flash');
+      void d.offsetWidth;
+      d.classList.add('result-flash');
+    }
+    function evaluate(a,b,op) {
+      switch(op) { case '+': return a+b; case '−': return a-b; case '×': return a*b; case '÷': return b!==0?a/b:'Error'; }
+    }
+
+    // History functions
+    function addToHistory(value, calculation = '', tool = currentMode) {
+      fullHistory.push({ tool, calculation: calculation || value, result: value, timestamp: new Date().toLocaleTimeString() });
+      calcHistory = calcHistory.slice(0, calcHistoryIndex + 1);
+      calcHistory.push(value);
+      calcHistoryIndex = calcHistory.length - 1;
+      updateHistoryDisplay();
+    }
+    window.undoCalc = function() {
+      if (calcHistoryIndex > 0) {
+        calcHistoryIndex--;
+        calcDisplay = calcHistory[calcHistoryIndex];
+        document.getElementById('calcDisp').textContent = calcDisplay;
+        updateHistoryDisplay();
+      }
+    };
+    window.redoCalc = function() {
+      if (calcHistoryIndex < calcHistory.length - 1) {
+        calcHistoryIndex++;
+        calcDisplay = calcHistory[calcHistoryIndex];
+        document.getElementById('calcDisp').textContent = calcDisplay;
+        updateHistoryDisplay();
+      }
+    };
+    function updateHistoryDisplay() {
+      const list = document.getElementById('historyListPanel');
+      if (!list) return;
+      if (fullHistory.length === 0) {
+        list.innerHTML = `<div class="flex items-center justify-center h-full text-center" style="color:${DIM}44;padding:40px 20px">
+          <div style="font-size:14px;font-weight:500">No history yet</div>
+        </div>`;
+        return;
+      }
+      list.innerHTML = fullHistory.map((h, i) => `
+        <div class="p-3 rounded-lg cursor-pointer transition text-xs font-display" 
+             style="background:${SURFACE};color:${DIM};border-left:2px solid ${ACCENT}"
+             title="${h.timestamp}">
+          <div class="text-xs accent-text mb-1" style="color:${ACCENT}">${h.tool}</div>
+          <div class="text-main" style="color:${TEXT}">${h.calculation}</div>
+          <div class="text-dim mt-1" style="color:${ACCENT}">= ${h.result}</div>
+        </div>
+      `).join('');
+    }
+
+    // ============== SCIENTIFIC ==============
+    function scientificHTML() {
+      calcDisplay='0'; calcPrev=''; calcOp=''; calcReset=false; sciDeg=true;
+      const row1 = [['sin','func'],['cos','func'],['tan','func'],['π','func'],['e','func']];
+      const row2 = [['asin','func'],['acos','func'],['atan','func'],['sinh','func'],['cosh','func']];
+      const row3 = [['x²','func'],['√','func'],['∛','func'],['xʸ','op'],['log','func']];
+      const row4 = [['ln','func'],['log₂','func'],['1/x','func'],['tanh','func'],['abs','func']];
+      const row5 = [['!','func'],['nPr','func'],['nCr','func'],['mod','func'],['gcd','func']];
+      const row6 = [['C','func'],['±','func'],['%','func'],['⌊','func'],['⌈','func']];
+      const row7 = [['sin⁻¹','func'],['cos⁻¹','func'],['tan⁻¹','func'],['coth','func'],['sech','func']];
+      const row8 = [['Rand','func'],['φ','func'],['∞','func'],['π²','func'],['e²','func']];
+      const main = [
+        ['7','num'],['8','num'],['9','num'],['÷','op'],
+        ['4','num'],['5','num'],['6','num'],['×','op'],
+        ['1','num'],['2','num'],['3','num'],['−','op'],
+        ['0','num'],['.','num'],['+','op'],['=','accent'],
+      ];
+      return `
+        <div class="surface-bg rounded-2xl p-4 mb-3" style="background:${SURFACE}">
+          <div class="text-dim text-xs text-right h-5 font-display" id="calcPrev" style="color:${DIM}"></div>
+          <div class="text-main text-right text-3xl font-display font-bold truncate" id="calcDisp" style="color:${TEXT}">0</div>
+          <div class="text-xs text-right mt-1" id="memoryDisplay" style="color:${ACCENT};min-height:16px"></div>
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row1.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row2.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row3.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row4.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row5.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row6.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-0.5" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row7.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-1" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          ${row8.map(([l,t])=>`<button class="calc-btn calc-${t} h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="${l}">${l}</button>`).join('')}
+        </div>
+        <div class="grid grid-cols-5 gap-0.5 mb-2" style="background:${SURFACE}22;padding:6px;border-radius:12px">
+          <button class="calc-btn calc-func h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="MC">MC</button>
+          <button class="calc-btn calc-func h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="MR">MR</button>
+          <button class="calc-btn calc-func h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="M+">M+</button>
+          <button class="calc-btn calc-func h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="M-">M−</button>
+          <button class="calc-btn calc-func h-8 text-xs" style="background:${DIM}22;color:${ACCENT};border-radius:6px" data-sci="M×">M×</button>
+        </div>
+        <div class="grid grid-cols-4 gap-1.5">${main.map(([l,t])=>`<button class="calc-btn calc-${t} h-11 text-base" data-sci="${l}">${l}</button>`).join('')}</div>`;
+    }
+    let sciMemory = 0;
+    function setupScientific() {
+      document.querySelectorAll('[data-sci]').forEach(b => {
+        b.onclick = (e) => {
+          e.preventDefault();
+          b.classList.add('pressed');
+          setTimeout(() => b.classList.remove('pressed'), 200);
+          handleSci(b.dataset.val || b.dataset.sci, b);
+        };
+      });
+      updateMemoryDisplay();
+    }
+    function handleSci(v, btn) {
+      const d = document.getElementById('calcDisp');
+      const p = document.getElementById('calcPrev');
+      const n = parseFloat(calcDisplay);
+      const toRad = x => sciDeg ? x*Math.PI/180 : x;
+      const fromRad = x => sciDeg ? x*180/Math.PI : x;
+      
+      // Factorial helper
+      const factorial = x => { let f=1; for(let i=2;i<=Math.floor(Math.abs(x));i++)f*=i; return f; };
+      // GCD helper
+      const gcd = (a, b) => b === 0 ? Math.abs(a) : gcd(b, a % b);
+      // LCM helper
+      const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
+
+      if ('0123456789'.includes(v)) { calcDisplay=(calcDisplay==='0'||calcReset)?v:calcDisplay+v; calcReset=false; }
+      else if (v==='.') { if(calcReset){calcDisplay='0';calcReset=false;} if(!calcDisplay.includes('.'))calcDisplay+='.'; }
+      else if (v==='C') { calcDisplay='0';calcPrev='';calcOp='';calcReset=false;p.textContent=''; }
+      else if (v==='sin') { calcDisplay=String(Math.sin(toRad(n))); calcReset=true; }
+      else if (v==='cos') { calcDisplay=String(Math.cos(toRad(n))); calcReset=true; }
+      else if (v==='tan') { calcDisplay=String(Math.tan(toRad(n))); calcReset=true; }
+      else if (v==='sin⁻¹') { calcDisplay=String(fromRad(Math.asin(n))); calcReset=true; }
+      else if (v==='cos⁻¹') { calcDisplay=String(fromRad(Math.acos(n))); calcReset=true; }
+      else if (v==='tan⁻¹') { calcDisplay=String(fromRad(Math.atan(n))); calcReset=true; }
+      else if (v==='asin') { calcDisplay=String(fromRad(Math.asin(n))); calcReset=true; }
+      else if (v==='acos') { calcDisplay=String(fromRad(Math.acos(n))); calcReset=true; }
+      else if (v==='atan') { calcDisplay=String(fromRad(Math.atan(n))); calcReset=true; }
+      else if (v==='sinh') { calcDisplay=String(Math.sinh(n)); calcReset=true; }
+      else if (v==='cosh') { calcDisplay=String(Math.cosh(n)); calcReset=true; }
+      else if (v==='tanh') { calcDisplay=String(Math.tanh(n)); calcReset=true; }
+      else if (v==='coth') { calcDisplay=String(1/Math.tanh(n)); calcReset=true; }
+      else if (v==='sech') { calcDisplay=String(1/Math.cosh(n)); calcReset=true; }
+      else if (v==='π') { calcDisplay=String(Math.PI); calcReset=true; }
+      else if (v==='π²') { calcDisplay=String(Math.PI * Math.PI); calcReset=true; }
+      else if (v==='e') { calcDisplay=String(Math.E); calcReset=true; }
+      else if (v==='e²') { calcDisplay=String(Math.E * Math.E); calcReset=true; }
+      else if (v==='φ') { calcDisplay=String((1 + Math.sqrt(5)) / 2); calcReset=true; }
+      else if (v==='∞') { calcDisplay='Infinity'; calcReset=true; }
+      else if (v==='Rand') { calcDisplay=String(Math.random()); calcReset=true; }
+      else if (v==='x²') { calcDisplay=String(n*n); calcReset=true; }
+      else if (v==='√') { calcDisplay=String(Math.sqrt(n)); calcReset=true; }
+      else if (v==='∛') { calcDisplay=String(Math.cbrt(n)); calcReset=true; }
+      else if (v==='^3') { calcDisplay=String(Math.pow(n,3)); calcReset=true; }
+      else if (v==='log') { calcDisplay=String(Math.log10(n)); calcReset=true; }
+      else if (v==='log₂') { calcDisplay=String(Math.log2(n)); calcReset=true; }
+      else if (v==='ln') { calcDisplay=String(Math.log(n)); calcReset=true; }
+      else if (v==='1/x') { calcDisplay=String(1/n); calcReset=true; }
+      else if (v==='abs') { calcDisplay=String(Math.abs(n)); calcReset=true; }
+      else if (v==='!') { calcDisplay=String(factorial(n)); calcReset=true; }
+      else if (v==='nPr') { calcDisplay='nPr'; calcReset=true; }
+      else if (v==='nCr') { calcDisplay='nCr'; calcReset=true; }
+      else if (v==='mod') { calcDisplay='mod'; calcReset=true; }
+      else if (v==='gcd') { calcDisplay='gcd'; calcReset=true; }
+      else if (v==='⌊') { calcDisplay=String(Math.floor(n)); calcReset=true; }
+      else if (v==='⌈') { calcDisplay=String(Math.ceil(n)); calcReset=true; }
+      else if (v==='±') { calcDisplay = calcDisplay.startsWith('-') ? calcDisplay.slice(1) : '-'+calcDisplay; }
+      else if (v==='%') { calcDisplay = String(parseFloat(calcDisplay)/100); }
+      else if (v==='DEG') { sciDeg=!sciDeg; btn.textContent=sciDeg?'DEG':'RAD'; return; }
+      else if ('÷×−+'.includes(v)||v==='xʸ') {
+        const op = v==='xʸ'?'^':v;
+        if(calcOp&&!calcReset) calcDisplay=String(evalSci(parseFloat(calcPrev),n,calcOp));
+        calcPrev=calcDisplay; calcOp=op; calcReset=true;
+        p.textContent=calcPrev+' '+v;
+      }
+      else if (v==='=') {
+        if(calcOp){ const r=evalSci(parseFloat(calcPrev),n,calcOp); p.textContent=calcPrev+' '+calcOp+' '+calcDisplay+' ='; calcDisplay=String(r);calcOp='';calcReset=true; addToHistory(calcDisplay, calcPrev + ' ' + calcOp + ' ' + n); }
+      }
+      else if (['MC','MR','M+','M-','M×'].includes(v)) {
+        window.handleMemory(v);
+        return;
+      }
+      const num = parseFloat(calcDisplay);
+      if (!isNaN(num) && calcDisplay.length > 12) calcDisplay = parseFloat(num.toPrecision(10)).toString();
+      d.textContent = calcDisplay;
+      d.classList.remove('result-flash'); void d.offsetWidth; d.classList.add('result-flash');
+    }
+    function evalSci(a,b,op) {
+      switch(op){case '+':return a+b;case '−':return a-b;case '×':return a*b;case '÷':return b?a/b:'Error';case '^':return Math.pow(a,b);}
+    }
+    function updateMemoryDisplay() {
+      const display = document.getElementById('memoryDisplay');
+      if (display) {
+        display.textContent = sciMemory !== 0 ? `M: ${sciMemory.toFixed(4)}` : '';
+      }
+    }
+    window.handleMemory = function(op) {
+      const n = parseFloat(calcDisplay);
+      if (op === 'MC') {
+        sciMemory = 0;
+      } else if (op === 'MR') {
+        calcDisplay = String(sciMemory);
+        calcReset = true;
+      } else if (op === 'M+') {
+        sciMemory += n;
+      } else if (op === 'M-') {
+        sciMemory -= n;
+      } else if (op === 'M×') {
+        sciMemory *= n;
+      }
+      updateMemoryDisplay();
+      const d = document.getElementById('calcDisp');
+      if (op === 'MR') d.textContent = calcDisplay;
+    };
+
+    // ============== PROGRAMMER ==============
+    function programmerHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-4 mb-3" style="background:${SURFACE}">
+          <input id="progInput" class="input-field w-full bg-transparent text-right text-2xl font-display font-bold outline-none border-b pb-2 mb-3" style="color:${TEXT};border-color:${DIM}44" placeholder="0" value="0">
+          <div class="space-y-1.5 text-sm font-display">
+            <div class="flex justify-between"><span class="text-dim" style="color:${DIM}">DEC</span><span class="text-main" id="pDec" style="color:${TEXT}">0</span></div>
+            <div class="flex justify-between"><span class="text-dim" style="color:${DIM}">HEX</span><span class="accent-text" id="pHex" style="color:${ACCENT}">0</span></div>
+            <div class="flex justify-between"><span class="text-dim" style="color:${DIM}">OCT</span><span class="text-main" id="pOct" style="color:${TEXT}">0</span></div>
+            <div class="flex justify-between"><span class="text-dim" style="color:${DIM}">BIN</span><span class="text-main" id="pBin" style="color:${TEXT}">0</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="calc-btn calc-func h-11 text-sm" onclick="progConvert('hex')">From HEX</button>
+          <button class="calc-btn calc-func h-11 text-sm" onclick="progConvert('bin')">From BIN</button>
+          <button class="calc-btn calc-func h-11 text-sm" onclick="progConvert('oct')">From OCT</button>
+          <button class="calc-btn calc-accent h-11 text-sm" onclick="progConvert('dec')">From DEC</button>
+        </div>`;
+    }
+    function setupProgrammer() {
+      const inp = document.getElementById('progInput');
+      inp.addEventListener('input', () => progConvert('dec'));
+      progConvert('dec');
+    }
+
+    // ============== STOPWATCH ==============
+    function stopwatchHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Stopwatch</h2>
+          <div class="text-center">
+            <div class="text-7xl font-display font-bold font-mono" id="stopwatchDisplay" style="color:${ACCENT}">00:00:00</div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <button class="calc-btn calc-accent h-12 text-sm font-bold rounded-xl" id="playBtn" onclick="startStopwatch()" style="background:${ACCENT};color:#0f0f13">Start</button>
+            <button class="calc-btn calc-func h-12 text-sm font-bold rounded-xl" onclick="pauseStopwatch()" style="background:${DIM}22;color:${DIM}">Pause</button>
+            <button class="calc-btn calc-func h-12 text-sm font-bold rounded-xl" onclick="resetStopwatch()" style="background:${DIM}22;color:${DIM}">Reset</button>
+          </div>
+          <div id="lapsList" class="space-y-1.5"></div>
+        </div>`;
+    }
+    function setupStopwatch() {
+      stopwatchRunning = false;
+      stopwatchTime = 0;
+      updateStopwatchDisplay();
+    }
+    window.startStopwatch = function() {
+      if (!stopwatchRunning) {
+        stopwatchRunning = true;
+        document.getElementById('playBtn').textContent = 'Stop';
+        stopwatchInterval = setInterval(() => {
+          stopwatchTime += 10;
+          updateStopwatchDisplay();
+        }, 10);
+      }
+    };
+    window.pauseStopwatch = function() {
+      stopwatchRunning = false;
+      clearInterval(stopwatchInterval);
+      document.getElementById('playBtn').textContent = 'Resume';
+    };
+    window.resetStopwatch = function() {
+      stopwatchRunning = false;
+      stopwatchTime = 0;
+      clearInterval(stopwatchInterval);
+      document.getElementById('playBtn').textContent = 'Start';
+      updateStopwatchDisplay();
+      document.getElementById('lapsList').innerHTML = '';
+    };
+    function updateStopwatchDisplay() {
+      const ms = stopwatchTime;
+      const h = Math.floor(ms / 3600000).toString().padStart(2, '0');
+      const m = Math.floor((ms % 3600000) / 60000).toString().padStart(2, '0');
+      const s = Math.floor((ms % 60000) / 1000).toString().padStart(2, '0');
+      const ms_display = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+      document.getElementById('stopwatchDisplay').textContent = `${h}:${m}:${s}.${ms_display}`;
+    }
+
+    // ============== EQUATION SOLVER ==============
+    function equationHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Equation Solver</h2>
+          <div class="text-xs text-dim mb-3" style="color:${DIM}">Linear: 2x + 5 = 13  |  Quadratic: x² - 5x + 6 = 0</div>
+          <input type="text" id="eqInput" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Enter equation (use x for variable)">
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="solveEquation(event)" style="background:${ACCENT};color:#0f0f13">Solve</button>
+          <div id="eqResult" class="hidden result-box rounded-xl p-4 border" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div id="eqVal" class="text-center"></div>
+          </div>
+        </div>`;
+    }
+    window.solveEquation = function(e) {
+      e.preventDefault();
+      const eq = document.getElementById('eqInput').value.trim();
+      try {
+        const parts = eq.split('=');
+        if (parts.length !== 2) { showConfirmation('Use format: 2x + 5 = 13 or x² - 5x + 6 = 0'); return; }
+        const left = parts[0];
+        const right = parseFloat(parts[1]);
+        if (isNaN(right)) { showConfirmation('Invalid right side'); return; }
+        
+        const eqStr = left + ' - (' + right + ')';
+        const normalized = eqStr.replace(/x²|x\^2/g, '({x})²').replace(/\^/g, '**');
+        
+        let a = 0, b = 0, c = 0;
+        const isQuadratic = /x²|x\^2|\(\{x\}\)\²/.test(normalized);
+        
+        if (isQuadratic) {
+          for (let i = -100; i <= 100; i += 0.1) {
+            const testEq = normalized.replace(/{x}/g, i);
+            const result = eval(testEq);
+            if (Math.abs(result) < 0.0001) {
+              a = 1;
+              break;
+            }
+          }
+          
+          const coeffStr = left.replace(/\s+/g, '');
+          const x2Match = coeffStr.match(/([+-]?\d*\.?\d*)x²|([+-]?\d*\.?\d*)x\^2/);
+          const xMatch = coeffStr.match(/([+-]?\d*\.?\d*)x(?!²|\^)/);
+          const constMatch = coeffStr.match(/([+-]\d+\.?\d*|^\d+\.?\d*)/);
+          
+          a = x2Match ? parseFloat(x2Match[1] || x2Match[2] || '1') : 0;
+          b = xMatch ? parseFloat(xMatch[1] || '1') : 0;
+          c = constMatch ? parseFloat(constMatch[1]) : 0;
+          c = c - right;
+          
+          if (a === 0) {
+            const x = -c / b;
+            document.getElementById('eqVal').innerHTML = `<div class="text-sm text-dim" style="color:${DIM}">Solution</div><div class="text-2xl font-display font-bold accent-text" style="color:${ACCENT}">x = ${x.toFixed(4)}</div>`;
+          } else {
+            const disc = b * b - 4 * a * c;
+            if (disc < 0) {
+              document.getElementById('eqVal').innerHTML = `<div class="text-sm text-dim" style="color:${DIM}">No real solutions</div><div class="text-xs accent-text" style="color:${ACCENT}">Discriminant: ${disc.toFixed(2)}</div>`;
+            } else if (disc === 0) {
+              const x = -b / (2 * a);
+              document.getElementById('eqVal').innerHTML = `<div class="text-sm text-dim" style="color:${DIM}">One Solution</div><div class="text-2xl font-display font-bold accent-text" style="color:${ACCENT}">x = ${x.toFixed(4)}</div>`;
+            } else {
+              const x1 = (-b + Math.sqrt(disc)) / (2 * a);
+              const x2 = (-b - Math.sqrt(disc)) / (2 * a);
+              document.getElementById('eqVal').innerHTML = `<div class="text-sm text-dim" style="color:${DIM}">Two Solutions</div><div class="space-y-2 mt-2"><div class="text-lg font-display font-bold accent-text" style="color:${ACCENT}">x₁ = ${x1.toFixed(4)}</div><div class="text-lg font-display font-bold accent-text" style="color:${ACCENT}">x₂ = ${x2.toFixed(4)}</div></div>`;
+            }
+          }
+        } else {
+          for (let i = -10000; i <= 10000; i++) {
+            const testEq = normalized.replace(/{x}/g, i);
+            const result = eval(testEq);
+            if (Math.abs(result) < 0.01) {
+              document.getElementById('eqVal').innerHTML = `<div class="text-sm text-dim" style="color:${DIM}">Solution</div><div class="text-2xl font-display font-bold accent-text" style="color:${ACCENT}">x = ${i.toFixed(4)}</div>`;
+              const r = document.getElementById('eqResult');
+              r.classList.remove('hidden');
+              r.classList.add('result-flash');
+              return;
+            }
+          }
+          showConfirmation('No solution found');
+          return;
+        }
+        
+        const r = document.getElementById('eqResult');
+        r.classList.remove('hidden');
+        r.classList.add('result-flash');
+      } catch (err) {
+        showConfirmation('Invalid equation format');
+      }
+    };
+    window.progConvert = function(base) {
+      const inp = document.getElementById('progInput');
+      let v = inp.value.trim();
+      let n;
+      try {
+        if(base==='hex') n=parseInt(v,16);
+        else if(base==='bin') n=parseInt(v,2);
+        else if(base==='oct') n=parseInt(v,8);
+        else n=parseInt(v,10);
+      } catch(e) { n=NaN; }
+      if(isNaN(n)) { document.getElementById('pDec').textContent='Invalid'; return; }
+      document.getElementById('pDec').textContent=n.toString(10);
+      document.getElementById('pHex').textContent=n.toString(16).toUpperCase();
+      document.getElementById('pOct').textContent=n.toString(8);
+      document.getElementById('pBin').textContent=n.toString(2);
+    };
+
+    // ============== BMI ==============
+    function bmiHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">BMI Calculator</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Weight (kg)</label>
+            <input type="number" id="bmiW" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="70">
+          </div>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Height (cm)</label>
+            <input type="number" id="bmiH" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="175">
+          </div>
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="calcBMI(event)">Calculate BMI</button>
+          <div id="bmiResult" class="hidden result-box rounded-xl p-4 border text-center" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="text-3xl font-display font-bold accent-text" id="bmiVal" style="color:${ACCENT}"></div>
+            <div class="text-main text-sm mt-1" id="bmiCat" style="color:${TEXT}"></div>
+          </div>
+        </div>`;
+    }
+    window.calcBMI = function(e) {
+      e.preventDefault();
+      const w=parseFloat(document.getElementById('bmiW').value), h=parseFloat(document.getElementById('bmiH').value)/100;
+      if(!w||!h) return;
+      const bmi=(w/(h*h)).toFixed(1);
+      let cat='Normal weight';
+      if(bmi<18.5) cat='Underweight'; else if(bmi>=25&&bmi<30) cat='Overweight'; else if(bmi>=30) cat='Obese';
+      document.getElementById('bmiVal').textContent=bmi;
+      document.getElementById('bmiCat').textContent=cat;
+      const r=document.getElementById('bmiResult'); r.classList.remove('hidden'); r.classList.add('result-flash');
+    };
+
+    // ============== AGE ==============
+    function ageHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Age Finder</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Date of Birth (MM/DD/YY)</label>
+            <input type="text" id="ageDob" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="4/11/26">
+          </div>
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="calcAge(event)">Calculate Age</button>
+          <div id="ageResult" class="hidden result-box rounded-xl p-4 border" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="text-center">
+              <div class="text-4xl font-display font-bold accent-text" id="ageYears" style="color:${ACCENT}"></div>
+              <div class="text-dim text-xs mt-1" style="color:${DIM}">years old</div>
+            </div>
+            <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+              <div><div class="text-main font-display font-bold text-lg" id="ageM" style="color:${TEXT}"></div><div class="text-dim text-xs" style="color:${DIM}">months</div></div>
+              <div><div class="text-main font-display font-bold text-lg" id="ageD" style="color:${TEXT}"></div><div class="text-dim text-xs" style="color:${DIM}">days</div></div>
+              <div><div class="text-main font-display font-bold text-lg" id="ageNext" style="color:${TEXT}"></div><div class="text-dim text-xs" style="color:${DIM}">days to b-day</div></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    window.calcAge = function(e) {
+      e.preventDefault();
+      const input = document.getElementById('ageDob').value.trim();
+      if (!input) return;
+      
+      const parts = input.split('/');
+      if (parts.length !== 3) { showConfirmation('Use format: MM/DD/YY'); return; }
+      
+      let month = parseInt(parts[0]), day = parseInt(parts[1]), year = parseInt(parts[2]);
+      
+      if (isNaN(month) || isNaN(day) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) {
+        showConfirmation('Invalid date');
+        return;
+      }
+      
+      year = year > 50 ? 1900 + year : 2000 + year;
+      const dob = new Date(year, month - 1, day);
+      if (isNaN(dob) || dob > new Date()) { showConfirmation('Invalid date or future date'); return; }
+      
+      const now = new Date();
+      let y = now.getFullYear() - dob.getFullYear(), m = now.getMonth() - dob.getMonth(), d = now.getDate() - dob.getDate();
+      if (d < 0) { m--; d += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); }
+      if (m < 0) { y--; m += 12; }
+      const totalD = Math.floor((now - dob) / (1000 * 60 * 60 * 24));
+      let next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+      if (next <= now) next.setFullYear(next.getFullYear() + 1);
+      const daysNext = Math.ceil((next - now) / (1000 * 60 * 60 * 24));
+      document.getElementById('ageYears').textContent = y;
+      document.getElementById('ageM').textContent = m;
+      document.getElementById('ageD').textContent = totalD.toLocaleString();
+      document.getElementById('ageNext').textContent = daysNext;
+      const r = document.getElementById('ageResult');
+      r.classList.remove('hidden');
+      r.classList.add('result-flash');
+    };
+
+    // ============== UNIT ==============
+    function unitHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Unit Converter</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Category</label>
+            <select id="unitCat" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="updateUnits()">
+              <option value="length">Length</option><option value="weight">Weight</option><option value="temp">Temperature</option><option value="speed">Speed</option><option value="volume">Volume</option><option value="area">Area</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">From</label><select id="unitFrom" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44"></select></div>
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">To</label><select id="unitTo" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44"></select></div>
+          </div>
+          <input type="number" id="unitVal" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Enter value" oninput="convertUnit()">
+          <div id="unitResult" class="result-box rounded-xl p-4 border text-center" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <span class="text-2xl font-display font-bold accent-text" id="unitOut" style="color:${ACCENT}">—</span>
+          </div>
+        </div>`;
+    }
+    const unitData = {
+      length: { units:['m','km','cm','mm','μm','nm','in','ft','yd','mi','nmi'], base:{m:1,km:1000,cm:0.01,mm:0.001,μm:0.000001,nm:0.000000001,in:0.0254,ft:0.3048,yd:0.9144,mi:1609.34,nmi:1852} },
+      weight: { units:['kg','g','mg','μg','oz','lb','st','ton','t'], base:{kg:1,g:0.001,mg:0.000001,μg:0.000000001,oz:0.0283495,lb:0.453592,st:6.35029,ton:907.185,t:1000} },
+      temp: { units:['°C','°F','K'] },
+      speed: { units:['m/s','km/h','mph','knots','ft/s'], base:{'m/s':1,'km/h':0.277778,'mph':0.44704,'knots':0.514444,'ft/s':0.3048} },
+      volume: { units:['ml','l','galUS','galUK','cup','tbsp','tsp','fl oz'], base:{ml:1,l:1000,galUS:3785.41,galUK:4546.09,cup:236.588,tbsp:14.787,tsp:4.929,'fl oz':29.574} },
+      area: { units:['m²','km²','cm²','in²','ft²','yd²','mi²','acre','hectare'], base:{'m²':1,'km²':1000000,'cm²':0.0001,'in²':0.00064516,'ft²':0.092903,'yd²':0.836127,'mi²':2589988,'acre':4046.86,'hectare':10000} }
+    };
+    window.updateUnits = function() {
+      const cat = document.getElementById('unitCat').value;
+      const u = unitData[cat].units;
+      ['unitFrom','unitTo'].forEach((id,i)=>{
+        const sel=document.getElementById(id);
+        sel.innerHTML=u.map((v,j)=>`<option value="${v}" ${j===i?'selected':''}>${v}</option>`).join('');
+      });
+      convertUnit();
+    };
+    function setupUnit() { updateUnits(); }
+    window.convertUnit = function() {
+      const cat=document.getElementById('unitCat').value, from=document.getElementById('unitFrom').value, to=document.getElementById('unitTo').value, val=parseFloat(document.getElementById('unitVal').value);
+      if(isNaN(val)){document.getElementById('unitOut').textContent='—';return;}
+      let result;
+      if(cat==='temp'){
+        let c=val;
+        if(from==='°F')c=(val-32)*5/9; else if(from==='K')c=val-273.15;
+        if(to==='°C')result=c; else if(to==='°F')result=c*9/5+32; else result=c+273.15;
+      } else {
+        const b=unitData[cat].base;
+        result=val*b[from]/b[to];
+      }
+      document.getElementById('unitOut').textContent=parseFloat(result.toPrecision(8));
+    };
+
+    // ============== COOKING CONVERTER ==============
+    function cookingHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Cooking Converter</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Type</label>
+            <select id="cookType" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="updateCookingUnits()">
+              <option value="volume">Volume</option><option value="weight">Weight</option><option value="temp">Temperature</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">From</label><select id="cookFrom" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44"></select></div>
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">To</label><select id="cookTo" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44"></select></div>
+          </div>
+          <input type="number" id="cookVal" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Enter amount" oninput="convertCooking()">
+          <div id="cookResult" class="result-box rounded-xl p-4 border text-center" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <span class="text-2xl font-display font-bold accent-text" id="cookOut" style="color:${ACCENT}">—</span>
+          </div>
+        </div>`;
+    }
+    const cookingData = {
+      volume: { units:['ml','l','cup','tbsp','tsp','fl oz','pint','quart','gallon'], base:{ml:1,l:1000,cup:236.588,tbsp:14.787,tsp:4.929,'fl oz':29.574,pint:473.176,quart:946.353,gallon:3785.41} },
+      weight: { units:['g','kg','oz','lb','mg','stone','t'], base:{g:1,kg:1000,oz:28.35,lb:453.592,mg:0.001,stone:6350.29,t:1000000} },
+      temp: { units:['°C','°F'] }
+    };
+    window.updateCookingUnits = function() {
+      const cat = document.getElementById('cookType').value;
+      const u = cookingData[cat].units;
+      ['cookFrom','cookTo'].forEach((id,i)=>{
+        const sel=document.getElementById(id);
+        sel.innerHTML=u.map((v,j)=>`<option value="${v}" ${j===i?'selected':''}>${v}</option>`).join('');
+      });
+      convertCooking();
+    };
+    function setupCooking() { updateCookingUnits(); }
+    window.convertCooking = function() {
+      const cat=document.getElementById('cookType').value, from=document.getElementById('cookFrom').value, to=document.getElementById('cookTo').value, val=parseFloat(document.getElementById('cookVal').value);
+      if(isNaN(val)){document.getElementById('cookOut').textContent='—';return;}
+      let result;
+      if(cat==='temp'){
+        let c=val;
+        if(from==='°F')c=(val-32)*5/9;
+        result=to==='°C'?c:c*9/5+32;
+      } else {
+        const b=cookingData[cat].base;
+        result=val*b[from]/b[to];
+      }
+      document.getElementById('cookOut').textContent=parseFloat(result.toPrecision(8));
+    };
+
+    // ============== CURRENCY CONVERTER ==============
+    function currencyHTML() {
+      const currencies = ['USD','EUR','GBP','JPY','CAD','AUD','CHF','CNY','INR','MXN','BRL','ZAR','RUB','KRW','SGD','HKD','NZD','SEK','NOK','DKK','CZK','HUF','PLN','RON','BGN','HRK','RSD','TRY','AED','SAR','QAR','KWD','BHD','OMR','JOD','ILS','EGP','NGN','KES','GHS','PKR','BDT','LKR','THB','MYR','IDR','PHP','VND','TWD'];
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Currency Converter</h2>
+          <input type="number" id="currVal" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Amount" oninput="convertCurrency()">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">From</label><select id="currFrom" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="convertCurrency()">${currencies.map((c,i)=>`<option value="${c}" ${i===0?'selected':''}>${c}</option>`).join('')}</select></div>
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">To</label><select id="currTo" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="convertCurrency()">${currencies.map((c,i)=>`<option value="${c}" ${i===1?'selected':''}>${c}</option>`).join('')}</select></div>
+          </div>
+          <div id="currResult" class="result-box rounded-xl p-4 border text-center" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <span class="text-2xl font-display font-bold accent-text" id="currOut" style="color:${ACCENT}">—</span>
+            <div class="text-xs text-dim mt-1" style="color:${DIM}">Note: Using sample rates</div>
+          </div>
+        </div>`;
+    }
+    const exchangeRates = {USD:1,EUR:0.92,GBP:0.79,JPY:149.5,CAD:1.36,AUD:1.53,CHF:0.88,CNY:7.24,INR:83.1,MXN:17.05,BRL:4.97,ZAR:18.5,RUB:98.5,KRW:1310,SGD:1.35,HKD:7.85,NZD:1.65,SEK:10.5,NOK:10.6,DKK:6.87,CZK:22.5,HUF:360,PLN:4.0,RON:4.6,BGN:1.86,HRK:6.8,RSD:117,TRY:33.0,AED:3.67,SAR:3.75,QAR:3.64,KWD:0.31,BHD:0.38,OMR:0.39,JOD:0.71,ILS:3.65,EGP:30.5,NGN:1230,KES:160,GHS:15.8,PKR:277,BDT:109,LKR:330,THB:35.0,MYR:4.7,IDR:15600,PHP:56.0,VND:24200,TWD:31.5};
+    window.convertCurrency = function() {
+      const from=document.getElementById('currFrom').value, to=document.getElementById('currTo').value, val=parseFloat(document.getElementById('currVal').value);
+      if(isNaN(val)){document.getElementById('currOut').textContent='—';return;}
+      const result = (val / exchangeRates[from]) * exchangeRates[to];
+      document.getElementById('currOut').textContent = result.toFixed(2);
+      addToHistory(result.toFixed(2), val + ' ' + from, 'currency');
+    };
+    function setupCurrency() { convertCurrency(); }
+
+    // ============== TIMEZONE CONVERTER ==============
+    function timezoneHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Timezone Converter</h2>
+          <input type="time" id="tzTime" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">From</label><select id="tzFrom" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="convertTime()"></select></div>
+            <div><label class="text-dim text-xs block mb-1" style="color:${DIM}">To</label><select id="tzTo" class="input-field w-full rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="convertTime()"></select></div>
+          </div>
+          <div id="tzResult" class="result-box rounded-xl p-4 border text-center" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="text-3xl font-display font-bold accent-text" id="tzOut" style="color:${ACCENT}">--:--</div>
+          </div>
+        </div>`;
+    }
+    const timezones = {
+      'UTC':0,'GMT':0,'WET':0,'IST':0,'GMT+1':1,'CET':1,'WAT':1,'CAT':2,'EAT':3,'GST':4,'AVT':5,'PKT':5,'IST':5.5,'AFT':4.5,'IRDT':4.5,'IRST':3.5,'TRT':3,'MSK':3,'EEST':3,'SAST':2,'SADT':3.5,'AST':3,'ALMT':6,'NOVT':7,'KRAT':7,'YAKT':9,'VLAT':10,'SAKT':11,'IRKT':8,'CHOT':8,'CST':8,'PHT':8,'SGT':8,'MYT':8,'ULAT':8,'AWST':8,'JST':9,'AEST':10,'ACST':9.5,'ACDT':10.5,'AWDT':9,'NZST':12,'NZDT':13,'FJT':12,'FJDT':13,'NZDT':13,'CHADT':13.75,'CHATST':12.75,'PST':-8,'PDT':-7,'MST':-7,'MDT':-6,'CST':-6,'CDT':-5,'EST':-5,'EDT':-4,'AST':-4,'ADT':-3,'NST':-3.5,'NDDT':-2.5,'BRT':-3,'BRDT':-2,'ART':-3,'AMST':-3,'PET':-5,'PDET':-4,'COT':-5,'VET':-4,'GUY':-4,'SRT':-3
+    };
+    window.convertTime = function() {
+      const from=document.getElementById('tzFrom').value, to=document.getElementById('tzTo').value, time=document.getElementById('tzTime').value;
+      if(!time)return;
+      const [h,m]=time.split(':').map(Number);
+      const offset = (timezones[to]||0) - (timezones[from]||0);
+      let nh=(h+Math.floor(offset))%24; if(nh<0)nh+=24;
+      document.getElementById('tzOut').textContent=`${nh.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+    };
+    function timezoneInit() {
+      const tzs = Object.keys(timezones);
+      ['tzFrom','tzTo'].forEach((id,i)=>{ document.getElementById(id).innerHTML=tzs.map((t,j)=>`<option value="${t}" ${j===i?'selected':''}>${t}</option>`).join(''); });
+    }
+    setTimeout(()=>timezoneInit(),100);
+
+    // ============== MORTGAGE CALCULATOR ==============
+    function mortgageHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Mortgage Calculator</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Loan Amount ($)</label>
+            <input type="number" id="mortPrincipal" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="300000">
+          </div>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Interest Rate (%)</label>
+            <input type="number" id="mortRate" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="6.5" step="0.1">
+          </div>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Loan Term (years)</label>
+            <input type="number" id="mortTerm" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="30">
+          </div>
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="calcMortgage(event)" style="background:${ACCENT};color:#0f0f13">Calculate</button>
+          <div id="mortResult" class="hidden result-box rounded-xl p-4 border" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="grid grid-cols-2 gap-3 text-center">
+              <div><div class="text-dim text-xs" style="color:${DIM}">Monthly Payment</div><div class="accent-text font-display font-bold text-lg" id="mortMonthly" style="color:${ACCENT}"></div></div>
+              <div><div class="text-dim text-xs" style="color:${DIM}">Total Interest</div><div class="text-main font-display font-bold text-lg" id="mortTotal" style="color:${TEXT}"></div></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    window.calcMortgage = function(e) {
+      e.preventDefault();
+      const p=parseFloat(document.getElementById('mortPrincipal').value), r=parseFloat(document.getElementById('mortRate').value)/100/12, n=parseFloat(document.getElementById('mortTerm').value)*12;
+      if(!p||!r||!n)return;
+      const m = p*r*(Math.pow(1+r,n))/(Math.pow(1+r,n)-1);
+      const total = m*n-p;
+      document.getElementById('mortMonthly').textContent = '$'+m.toFixed(2);
+      document.getElementById('mortTotal').textContent = '$'+total.toFixed(2);
+      const res = document.getElementById('mortResult');
+      res.classList.remove('hidden');
+      res.classList.add('result-flash');
+    };
+
+    // ============== PERCENTAGE ==============
+    function percentHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-5" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Percentage Calculator</h2>
+          <div class="space-y-3">
+            <div class="text-dim text-xs" style="color:${DIM}">What is <strong>X%</strong> of <strong>Y</strong>?</div>
+            <div class="flex gap-2 items-center">
+              <input type="number" id="pctX" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="%">
+              <span class="text-dim" style="color:${DIM}">% of</span>
+              <input type="number" id="pctY" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="number">
+            </div>
+            <button class="calc-btn calc-accent w-full h-11 text-sm font-bold rounded-xl" onclick="calcPct(event)">Calculate</button>
+            <div id="pctR1" class="result-box rounded-xl p-3 border text-center hidden" style="background:${ACCENT}15;border-color:${ACCENT}33">
+              <span class="text-xl font-display font-bold accent-text" style="color:${ACCENT}" id="pctA1"></span>
+            </div>
+          </div>
+          <hr style="border-color:${DIM}22">
+          <div class="space-y-3">
+            <div class="text-dim text-xs" style="color:${DIM}"><strong>X</strong> is what % of <strong>Y</strong>?</div>
+            <div class="flex gap-2 items-center">
+              <input type="number" id="pctA" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="X">
+              <span class="text-dim" style="color:${DIM}">of</span>
+              <input type="number" id="pctB" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Y">
+            </div>
+            <button class="calc-btn calc-accent w-full h-11 text-sm font-bold rounded-xl" onclick="calcPct2(event)">Calculate</button>
+            <div id="pctR2" class="result-box rounded-xl p-3 border text-center hidden" style="background:${ACCENT}15;border-color:${ACCENT}33">
+              <span class="text-xl font-display font-bold accent-text" style="color:${ACCENT}" id="pctA2"></span>
+            </div>
+          </div>
+        </div>`;
+    }
+    window.calcPct = function(e) {
+      e.preventDefault();
+      const x=parseFloat(document.getElementById('pctX').value),y=parseFloat(document.getElementById('pctY').value);
+      if(isNaN(x)||isNaN(y))return;
+      document.getElementById('pctA1').textContent=(x/100*y).toFixed(4).replace(/\.?0+$/,'');
+      const r=document.getElementById('pctR1'); r.classList.remove('hidden'); r.classList.add('result-flash');
+    };
+    window.calcPct2 = function(e) {
+      e.preventDefault();
+      const a=parseFloat(document.getElementById('pctA').value),b=parseFloat(document.getElementById('pctB').value);
+      if(isNaN(a)||isNaN(b)||b===0)return;
+      document.getElementById('pctA2').textContent=(a/b*100).toFixed(2)+'%';
+      const r=document.getElementById('pctR2'); r.classList.remove('hidden'); r.classList.add('result-flash');
+    };
+
+    // ============== TIP ==============
+    function tipHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Tip & Split</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Bill Amount</label>
+            <input type="number" id="tipBill" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="0.00">
+          </div>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Tip %</label>
+            <div class="flex gap-2">
+              ${[10,15,18,20,25].map(t=>`<button class="calc-btn calc-func flex-1 h-10 text-xs tip-pct" data-tip="${t}" onclick="setTip(${t})">${t}%</button>`).join('')}
+            </div>
+            <input type="number" id="tipPct" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border mt-2" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Custom %" value="15">
+          </div>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Split Between</label>
+            <input type="number" id="tipSplit" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="1" value="1" min="1">
+          </div>
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="calcTip(event)">Calculate</button>
+          <div id="tipResult" class="hidden result-box rounded-xl p-4 border" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="grid grid-cols-3 gap-3 text-center">
+              <div><div class="text-dim text-xs" style="color:${DIM}">Tip</div><div class="text-main font-display font-bold text-lg" id="tipAmt" style="color:${TEXT}"></div></div>
+              <div><div class="text-dim text-xs" style="color:${DIM}">Total</div><div class="accent-text font-display font-bold text-lg" id="tipTotal" style="color:${ACCENT}"></div></div>
+              <div><div class="text-dim text-xs" style="color:${DIM}">Per Person</div><div class="text-main font-display font-bold text-lg" id="tipPP" style="color:${TEXT}"></div></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    window.setTip = function(v) { document.getElementById('tipPct').value=v; };
+    window.calcTip = function(e) {
+      e.preventDefault();
+      const bill=parseFloat(document.getElementById('tipBill').value), pct=parseFloat(document.getElementById('tipPct').value), split=parseInt(document.getElementById('tipSplit').value)||1;
+      if(isNaN(bill))return;
+      const tip=bill*pct/100, total=bill+tip, pp=total/split;
+      document.getElementById('tipAmt').textContent='$'+tip.toFixed(2);
+      document.getElementById('tipTotal').textContent='$'+total.toFixed(2);
+      document.getElementById('tipPP').textContent='$'+pp.toFixed(2);
+      const r=document.getElementById('tipResult'); r.classList.remove('hidden'); r.classList.add('result-flash');
+    };
+
+    // ============== DISCOUNT CALCULATOR ==============
+    function discountHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-5" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Discount Calculator</h2>
+          <div class="space-y-3">
+            <div class="text-dim text-xs" style="color:${DIM}">Price with <strong>X%</strong> discount</div>
+            <div class="flex gap-2 items-center">
+              <span class="text-dim" style="color:${DIM}">Original:</span>
+              <input type="number" id="discOriginal" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="100">
+            </div>
+            <div class="flex gap-2 items-center">
+              <span class="text-dim" style="color:${DIM}">Discount:</span>
+              <input type="number" id="discPct" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="20">
+              <span class="text-dim" style="color:${DIM}">%</span>
+            </div>
+            <button class="calc-btn calc-accent w-full h-11 text-sm font-bold rounded-xl" onclick="calcDiscount(event)">Calculate</button>
+            <div id="discResult" class="result-box rounded-xl p-4 border hidden" style="background:${ACCENT}15;border-color:${ACCENT}33">
+              <div class="grid grid-cols-3 gap-3 text-center">
+                <div><div class="text-dim text-xs" style="color:${DIM}">You Save</div><div class="text-main font-display font-bold" id="discSave" style="color:${TEXT}"></div></div>
+                <div><div class="text-dim text-xs" style="color:${DIM}">New Price</div><div class="accent-text font-display font-bold text-lg" id="discNew" style="color:${ACCENT}"></div></div>
+                <div><div class="text-dim text-xs" style="color:${DIM}">% Off</div><div class="text-main font-display font-bold" id="discOff" style="color:${TEXT}"></div></div>
+              </div>
+            </div>
+          </div>
+          <hr style="border-color:${DIM}22">
+          <div class="space-y-3">
+            <div class="text-dim text-xs" style="color:${DIM}">Find original price from discounted price</div>
+            <div class="flex gap-2 items-center">
+              <span class="text-dim" style="color:${DIM}">Sale Price:</span>
+              <input type="number" id="discSalePrice" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="80">
+            </div>
+            <div class="flex gap-2 items-center">
+              <span class="text-dim" style="color:${DIM}">Discount:</span>
+              <input type="number" id="discSalePct" class="input-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="20">
+              <span class="text-dim" style="color:${DIM}">%</span>
+            </div>
+            <button class="calc-btn calc-accent w-full h-11 text-sm font-bold rounded-xl" onclick="calcOrigPrice(event)">Calculate</button>
+            <div id="discResult2" class="result-box rounded-xl p-4 border hidden" style="background:${ACCENT}15;border-color:${ACCENT}33">
+              <div class="text-center"><div class="text-dim text-xs" style="color:${DIM}">Original Price</div><div class="accent-text font-display font-bold text-2xl" id="discOrig" style="color:${ACCENT}"></div></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    window.calcDiscount = function(e) {
+      e.preventDefault();
+      const orig=parseFloat(document.getElementById('discOriginal').value), pct=parseFloat(document.getElementById('discPct').value);
+      if(isNaN(orig)||isNaN(pct))return;
+      const save=orig*pct/100, newPrice=orig-save;
+      document.getElementById('discSave').textContent='$'+save.toFixed(2);
+      document.getElementById('discNew').textContent='$'+newPrice.toFixed(2);
+      document.getElementById('discOff').textContent=pct+'%';
+      const r=document.getElementById('discResult'); r.classList.remove('hidden'); r.classList.add('result-flash');
+      addToHistory(newPrice.toFixed(2), orig + ' with ' + pct + '% off', 'discount');
+    };
+    window.calcOrigPrice = function(e) {
+      e.preventDefault();
+      const sale=parseFloat(document.getElementById('discSalePrice').value), pct=parseFloat(document.getElementById('discSalePct').value);
+      if(isNaN(sale)||isNaN(pct)||pct===100)return;
+      const orig=sale/(1-pct/100);
+      document.getElementById('discOrig').textContent='$'+orig.toFixed(2);
+      const r=document.getElementById('discResult2'); r.classList.remove('hidden'); r.classList.add('result-flash');
+      addToHistory(orig.toFixed(2), sale + ' with ' + pct + '% discount reverse', 'discount');
+    };
+
+    // ============== SHOPPING CALCULATOR ==============
+    let shoppingItems = [];
+    function shoppingHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Shopping List</h2>
+          <div class="flex gap-2">
+            <input type="text" id="shopItem" class="input-field flex-1 rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Item name">
+            <input type="number" id="shopQty" class="input-field w-16 rounded-xl px-3 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Qty" value="1" min="1">
+            <input type="number" id="shopPrice" class="input-field w-20 rounded-xl px-3 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="Price">
+            <button class="calc-btn calc-accent h-12 w-12 rounded-xl flex items-center justify-center" onclick="addShopItem()" style="background:${ACCENT};color:#0f0f13"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+          </div>
+          <div id="shopList" class="space-y-2 max-h-72 overflow-y-auto"></div>
+          <div class="result-box rounded-xl p-4 border" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div class="grid grid-cols-2 gap-3">
+              <div><div class="text-dim text-xs" style="color:${DIM}">Total Items</div><div class="text-main font-display font-bold" id="shopTotalQty" style="color:${TEXT}">0</div></div>
+              <div><div class="text-dim text-xs" style="color:${DIM}">Total Cost</div><div class="accent-text font-display font-bold text-lg" id="shopTotal" style="color:${ACCENT}">$0</div></div>
+            </div>
+            <button class="calc-btn calc-accent w-full h-10 text-xs font-bold rounded-lg mt-3" onclick="clearShoppingList()" style="background:${DIM}44;color:${DIM}">Clear List</button>
+          </div>
+        </div>`;
+    }
+    function setupShopping() { shoppingItems=[]; updateShoppingList(); }
+    window.addShopItem = function() {
+      const name=document.getElementById('shopItem').value.trim(), qty=parseInt(document.getElementById('shopQty').value)||1, price=parseFloat(document.getElementById('shopPrice').value);
+      if(!name||isNaN(price)||price<0)return;
+      shoppingItems.push({id:Date.now(), name, qty, price});
+      document.getElementById('shopItem').value='';
+      document.getElementById('shopPrice').value='';
+      updateShoppingList();
+    };
+    function updateShoppingList() {
+      const list=document.getElementById('shopList');
+      const total=shoppingItems.reduce((s,i)=>s+i.qty*i.price,0);
+      const totalQty=shoppingItems.reduce((s,i)=>s+i.qty,0);
+      list.innerHTML=shoppingItems.map(i=>`
+        <div class="flex items-center justify-between p-3 rounded-lg" style="background:${SURFACE};border-left:3px solid ${ACCENT}">
+          <div class="flex-1"><div class="text-sm text-main font-semibold" style="color:${TEXT}">${i.name}</div><div class="text-xs text-dim" style="color:${DIM}">Qty: ${i.qty} × $${i.price.toFixed(2)}</div></div>
+          <div class="text-right"><div class="font-display font-bold accent-text" style="color:${ACCENT}">$${(i.qty*i.price).toFixed(2)}</div></div>
+          <button onclick="removeShopItem(${i.id})" class="ml-3 p-1 hover:opacity-70 transition" style="color:${DIM}"><i data-lucide="trash-2" style="width:16px;height:16px"></i></button>
+        </div>
+      `).join('');
+      document.getElementById('shopTotalQty').textContent=totalQty;
+      document.getElementById('shopTotal').textContent='$'+total.toFixed(2);
+      lucide.createIcons();
+    }
+    window.removeShopItem = function(id) { shoppingItems=shoppingItems.filter(i=>i.id!==id); updateShoppingList(); };
+    window.clearShoppingList = function() { shoppingItems=[]; updateShoppingList(); };
+
+    // ============== GEOMETRY CALCULATOR ==============
+    function geometryHTML() {
+      return `
+        <div class="surface-bg rounded-2xl p-5 space-y-4" style="background:${SURFACE}">
+          <h2 class="text-main font-bold text-lg" style="color:${TEXT}">Geometry Calculator</h2>
+          <div>
+            <label class="text-dim text-xs block mb-1" style="color:${DIM}">Shape</label>
+            <select id="geoShape" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" onchange="updateGeoInputs()">
+              <option value="circle">Circle (Area/Circumference)</option>
+              <option value="rectangle">Rectangle (Area/Perimeter)</option>
+              <option value="triangle">Triangle (Area)</option>
+              <option value="sphere">Sphere (Volume/Surface)</option>
+              <option value="cylinder">Cylinder (Volume/Surface)</option>
+              <option value="cube">Cube (Volume/Surface)</option>
+              <option value="pyramid">Pyramid (Volume)</option>
+              <option value="cone">Cone (Volume/Surface)</option>
+            </select>
+          </div>
+          <div id="geoInputs" class="space-y-3"></div>
+          <button class="calc-btn calc-accent w-full h-12 text-sm font-bold rounded-xl" onclick="calcGeometry(event)" style="background:${ACCENT};color:#0f0f13">Calculate</button>
+          <div id="geoResult" class="result-box rounded-xl p-4 border hidden" style="background:${ACCENT}15;border-color:${ACCENT}33">
+            <div id="geoOutput" class="space-y-2"></div>
+          </div>
+        </div>`;
+    }
+    window.updateGeoInputs = function() {
+      const shape=document.getElementById('geoShape').value;
+      const inputs=document.getElementById('geoInputs');
+      const createInput=(label,id)=>`<div><label class="text-dim text-xs block mb-1" style="color:${DIM}">${label}</label><input type="number" id="${id}" class="input-field w-full rounded-xl px-4 py-3 text-sm outline-none border" style="background:${BG};color:${TEXT};border-color:${DIM}44" placeholder="0"></div>`;
+      
+      const shapes={
+        circle:`${createInput('Radius','geoRadius')}`,
+        rectangle:`${createInput('Length','geoLength')}${createInput('Width','geoWidth')}`,
+        triangle:`${createInput('Base','geoBase')}${createInput('Height','geoHeight')}`,
+        sphere:`${createInput('Radius','geoRadius')}`,
+        cylinder:`${createInput('Radius','geoRadius')}${createInput('Height','geoHeight')}`,
+        cube:`${createInput('Side Length','geoSide')}`,
+        pyramid:`${createInput('Base Area','geoBaseArea')}${createInput('Height','geoHeight')}`,
+        cone:`${createInput('Radius','geoRadius')}${createInput('Height','geoHeight')}`
+      };
+      inputs.innerHTML=shapes[shape];
+    };
+    window.calcGeometry = function(e) {
+      e.preventDefault();
+      const shape=document.getElementById('geoShape').value;
+      let result={};
+      
+      const getVal=id=>{const el=document.getElementById(id);return el?parseFloat(el.value):NaN;};
+      
+      if(shape==='circle'){
+        const r=getVal('geoRadius');
+        if(isNaN(r)||r<=0)return;
+        result={area:(Math.PI*r*r).toFixed(4),circumference:(2*Math.PI*r).toFixed(4)};
+      }else if(shape==='rectangle'){
+        const l=getVal('geoLength'),w=getVal('geoWidth');
+        if(isNaN(l)||isNaN(w)||l<=0||w<=0)return;
+        result={area:(l*w).toFixed(4),perimeter:(2*(l+w)).toFixed(4)};
+      }else if(shape==='triangle'){
+        const b=getVal('geoBase'),h=getVal('geoHeight');
+        if(isNaN(b)||isNaN(h)||b<=0||h<=0)return;
+        result={area:(0.5*b*h).toFixed(4)};
+      }else if(shape==='sphere'){
+        const r=getVal('geoRadius');
+        if(isNaN(r)||r<=0)return;
+        result={volume:(4/3*Math.PI*r*r*r).toFixed(4),surface:(4*Math.PI*r*r).toFixed(4)};
+      }else if(shape==='cylinder'){
+        const r=getVal('geoRadius'),h=getVal('geoHeight');
+        if(isNaN(r)||isNaN(h)||r<=0||h<=0)return;
+        result={volume:(Math.PI*r*r*h).toFixed(4),surface:(2*Math.PI*r*(r+h)).toFixed(4)};
+      }else if(shape==='cube'){
+        const s=getVal('geoSide');
+        if(isNaN(s)||s<=0)return;
+        result={volume:(s*s*s).toFixed(4),surface:(6*s*s).toFixed(4)};
+      }else if(shape==='pyramid'){
+        const ba=getVal('geoBaseArea'),h=getVal('geoHeight');
+        if(isNaN(ba)||isNaN(h)||ba<=0||h<=0)return;
+        result={volume:(1/3*ba*h).toFixed(4)};
+      }else if(shape==='cone'){
+        const r=getVal('geoRadius'),h=getVal('geoHeight');
+        if(isNaN(r)||isNaN(h)||r<=0||h<=0)return;
+        const slant=Math.sqrt(r*r+h*h);
+        result={volume:(1/3*Math.PI*r*r*h).toFixed(4),surface:(Math.PI*r*(r+slant)).toFixed(4)};
+      }
+      
+      const output=document.getElementById('geoOutput');
+      output.innerHTML=Object.entries(result).map(([k,v])=>`
+        <div class="flex justify-between items-center"><span class="text-dim text-sm capitalize" style="color:${DIM}">${k}:</span><span class="font-display font-bold accent-text text-lg" style="color:${ACCENT}">${v}</span></div>
+      `).join('');
+      const r=document.getElementById('geoResult'); r.classList.remove('hidden'); r.classList.add('result-flash');
+    };
+    setTimeout(()=>updateGeoInputs(),100);
+
+    // ============== INIT ==============
+    renderTabs();
+    renderMode();
+
+    window.elementSdk.init({
+      defaultConfig,
+      onConfigChange: async (cfg) => { applyConfig(cfg); },
+      mapToCapabilities: (cfg) => ({
+        recolorables: [
+          { get:()=>cfg.background_color||defaultConfig.background_color, set:v=>{cfg.background_color=v;window.elementSdk.setConfig({background_color:v})} },
+          { get:()=>cfg.surface_color||defaultConfig.surface_color, set:v=>{cfg.surface_color=v;window.elementSdk.setConfig({surface_color:v})} },
+          { get:()=>cfg.text_color||defaultConfig.text_color, set:v=>{cfg.text_color=v;window.elementSdk.setConfig({text_color:v})} },
+          { get:()=>cfg.primary_action_color||defaultConfig.primary_action_color, set:v=>{cfg.primary_action_color=v;window.elementSdk.setConfig({primary_action_color:v})} },
+          { get:()=>cfg.secondary_action_color||defaultConfig.secondary_action_color, set:v=>{cfg.secondary_action_color=v;window.elementSdk.setConfig({secondary_action_color:v})} },
+        ],
+        borderables: [],
+        fontEditable: { get:()=>cfg.font_family||defaultConfig.font_family, set:v=>{cfg.font_family=v;window.elementSdk.setConfig({font_family:v})} },
+        fontSizeable: undefined,
+      }),
+      mapToEditPanelValues: (cfg) => new Map([
+        ['app_title', cfg.app_title || defaultConfig.app_title],
+        ['calculator_name', cfg.calculator_name || defaultConfig.calculator_name]
+      ])
+    });
+
+    applyConfig(defaultConfig);
+    lucide.createIcons();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9eaafafe20941934',t:'MTc3NTkyMDg4MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
